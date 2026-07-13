@@ -22,6 +22,12 @@ Requires Python 3.11 or newer.
 pip install git+https://github.com/RudrenduPaul/ownvoice
 ```
 
+**npx / agent-native environments:** OwnVoice is a Python/PyTorch CLI, so the npm package below is a thin wrapper, not a Node reimplementation. It bootstraps into the real CLI via [`uv`](https://docs.astral.sh/uv/) or `pipx`, whichever is already on `PATH` -- useful for coding-agent sandboxes and CI runners that default to a Node toolchain. **Not yet published to the npm registry** (coming soon, tracked alongside the PyPI release):
+
+```bash
+npx ownvoice check
+```
+
 **Torch and CUDA:** `ownvoice check` (see below) needs no GPU at all and runs on CPU, matching pocket-tts's own CPU-capable design. Training a real adapter is much faster on an NVIDIA GPU. If you have one, install the CUDA build of PyTorch first by following [pytorch.org/get-started/locally](https://pytorch.org/get-started/locally/), then install OwnVoice on top of it, so `pip` does not silently pull the CPU-only wheel instead. On Apple Silicon or a CPU-only machine, the default `pip install` of torch is fine: `ownvoice check` and `ownvoice infer` will run normally, `ownvoice train` will just take longer per epoch.
 
 ## Quickstart
