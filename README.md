@@ -1,5 +1,7 @@
 # OwnVoice
 
+[![PyPI](https://img.shields.io/pypi/v/ownvoice)](https://pypi.org/project/ownvoice/)
+
 Train a LoRA voice adapter for [pocket-tts](https://github.com/kyutai-labs/pocket-tts) and keep the result: a file on your own disk, not an API subscription.
 
 ## Why this exists
@@ -17,6 +19,12 @@ OwnVoice exists for a narrower case: baking a voice permanently into trained wei
 ## Install
 
 Requires Python 3.11 or newer.
+
+```bash
+pip install ownvoice
+```
+
+PyPI: [pypi.org/project/ownvoice](https://pypi.org/project/ownvoice/). To install the latest unreleased code straight from source instead:
 
 ```bash
 pip install git+https://github.com/RudrenduPaul/ownvoice
