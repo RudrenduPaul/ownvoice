@@ -15,6 +15,7 @@ in the training set) by default, with an optional override.
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from typing import Any
 
@@ -87,12 +88,29 @@ def resolve_reference_audio(adapter_path: Path | str, override: Path | str | Non
             "override was given. Pass one explicitly."
         )
     reference_path = Path(reference_clip)
-    if not reference_path.exists():
+    if reference_path.is_absolute():
         raise AdapterLoadError(
-            f"Recorded reference clip {reference_path} no longer exists. Pass an override "
+            f"Recorded reference clip {reference_path} in metadata.json is an absolute path, "
+            "which OwnVoice does not trust from a shared adapter's metadata.json. Pass an "
+            "override path to a voice clip explicitly."
+        )
+
+    adapter_dir = adapter_path.parent
+    resolved_path = adapter_dir / reference_path
+    real_adapter_dir = os.path.realpath(adapter_dir)
+    real_resolved_path = os.path.realpath(resolved_path)
+    if os.path.commonpath([real_adapter_dir, real_resolved_path]) != real_adapter_dir:
+        raise AdapterLoadError(
+            f"Recorded reference clip {reference_path} in metadata.json resolves outside of "
+            f"{adapter_dir}, which OwnVoice does not trust from a shared adapter's "
+            "metadata.json. Pass an override path to a voice clip explicitly."
+        )
+    if not resolved_path.exists():
+        raise AdapterLoadError(
+            f"Recorded reference clip {resolved_path} no longer exists. Pass an override "
             "path to a voice clip explicitly."
         )
-    return reference_path
+    return resolved_path
 
 
 def generate_speech(base_model: Any, peft_model: Any, text: str, reference_audio_path: Path | str) -> torch.Tensor:
