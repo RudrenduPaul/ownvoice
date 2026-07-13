@@ -1,0 +1,35 @@
+{
+  "name": "ownvoice",
+  "version": "0.1.0",
+  "description": "Train a LoRA voice adapter for pocket-tts and own the resulting model, no API lock-in. npx-installable wrapper around the ownvoice Python CLI, for agent and Node-first environments.",
+  "bin": {
+    "ownvoice": "./bin/ownvoice.js"
+  },
+  "files": [
+    "bin"
+  ],
+  "keywords": [
+    "tts",
+    "text-to-speech",
+    "voice-cloning",
+    "lora",
+    "peft",
+    "pocket-tts",
+    "fine-tuning",
+    "cli",
+    "agent-native"
+  ],
+  "license": "MIT",
+  "author": "Rudrendu Paul",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/RudrenduPaul/ownvoice.git"
+  },
+  "homepage": "https://github.com/RudrenduPaul/ownvoice",
+  "bugs": {
+    "url": "https://github.com/RudrenduPaul/ownvoice/issues"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
