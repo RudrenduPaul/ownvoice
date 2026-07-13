@@ -339,6 +339,16 @@ def save_adapter_and_manifest(
     The manifest is a free byproduct of a training run that's happening
     anyway (locked eng-review decision #3), not a durable-infrastructure
     investment: training config, the similarity score, and a timestamp.
+
+    When `reference_clip` is given, the clip file itself is copied into
+    `out_dir` alongside the adapter, not just referenced by its original
+    path. Without this, the `ownvoice infer` command this function's caller
+    prints on success fails on copy-paste whenever `--voice-clips` isn't
+    nested inside `--out` (the common case), because
+    `infer.resolve_reference_audio()` deliberately only trusts a
+    `reference_clip` path that resolves inside the adapter's own directory.
+    Copying the file in makes the adapter directory self-contained and
+    satisfies that check by construction instead of by coincidence.
     """
     import json
     from datetime import datetime, timezone
@@ -361,6 +371,14 @@ def save_adapter_and_manifest(
     adapter_path = out_dir / "adapter.safetensors"
     save_file(state_dict, str(adapter_path))
 
+    reference_clip_name: str | None = None
+    if reference_clip is not None:
+        import shutil
+
+        reference_clip = Path(reference_clip)
+        reference_clip_name = reference_clip.name
+        shutil.copyfile(reference_clip, out_dir / reference_clip_name)
+
     resolved_timestamp = timestamp or datetime.now(timezone.utc).isoformat()
     metadata = {
         "ownvoice_version": __version__,
@@ -370,7 +388,7 @@ def save_adapter_and_manifest(
         "usable_threshold": USABLE_THRESHOLD,
         "metrics": metrics or {},
         "timestamp": resolved_timestamp,
-        "reference_clip": str(reference_clip) if reference_clip is not None else None,
+        "reference_clip": reference_clip_name,
     }
     metadata_path = out_dir / "metadata.json"
     metadata_path.write_text(json.dumps(metadata, indent=2))

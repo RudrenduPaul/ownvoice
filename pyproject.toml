@@ -32,6 +32,11 @@ dependencies = [
     "peft>=0.11.0",
     "safetensors>=0.4.0",
     "resemblyzer>=0.1.4",
+    # resemblyzer pulls in webrtcvad, which does `import pkg_resources`.
+    # setuptools>=81 removed pkg_resources entirely, which turns `ownvoice
+    # train` into an unhandled ModuleNotFoundError traceback. Pin below 81
+    # until webrtcvad (or resemblyzer) drops the pkg_resources dependency.
+    "setuptools<81",
     "soundfile>=0.12.0",
     "typer>=0.12.0",
 ]
