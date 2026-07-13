@@ -21,11 +21,21 @@ structurally against the real module tree, not assumed.
 run for real during this project's initial build: it downloaded pocket-tts's
 actual published weights from Hugging Face and PEFT's `target_modules=
 "all-linear"` injection genuinely succeeded against the loaded model, on
-CPU, with no errors. What remains unverified against real weights is the
-deeper training/generation plumbing (the flow-matching loss call signature
-in `_compute_flow_matching_loss()`, and the flow_lm swap in
-ownvoice/infer.py's `generate_speech()`) -- each is marked
-`# TODO(day-0-spike):` at the exact point that still needs it.
+CPU, with no errors. The deeper training/generation plumbing -- the
+flow-matching loss computation in `_compute_flow_matching_loss()`, and
+`ownvoice/infer.py`'s `generate_speech()` -- has since been verified for
+real too: a real 2-epoch LoRA training run against the loaded weights
+produced a finite, non-NaN loss, and the resulting adapter produced real,
+non-silent generated audio via `ownvoice infer`. Two genuine, real findings
+came out of that validation (see the docstrings on
+`_compute_flow_matching_loss()` and `generate_speech()` for the full
+detail): `FlowLMModel.forward()`'s "compute the loss" branch doesn't
+actually exist in the published inference-only package despite its own
+docstring, so the loss is computed directly from `flow_lm`'s real
+submodules instead; and swapping `base_model.flow_lm` to the PEFT wrapper
+for generation is not just unnecessary but actively wrong (it breaks
+pocket-tts's internal KV-cache state lookup) -- no swap is needed at all,
+since PEFT's injection already mutates `base_model.flow_lm` in place.
 """
 
 from __future__ import annotations
@@ -189,26 +199,79 @@ def check_compatibility() -> CheckResult:
 
 def _compute_flow_matching_loss(peft_model: Any, base_model: Any, waveform: Any, config: TrainingConfig) -> Any:
     """Compute pocket-tts's flow-matching training loss for one clip.
+
+    Verified against real loaded pocket-tts weights (kyutai's published
+    `pocket-tts` PyPI package, v2.1.0): `FlowLMModel.forward()`
+    (pocket_tts/models/flow_lm.py) does NOT actually support a
+    `lsd_decode_steps=0` "return the loss" branch the way its own
+    docstring describes -- that docstring is a leftover from kyutai's
+    internal (non-public) training codebase. The installed forward() has a
+    hard `assert lsd_decode_steps > 0` immediately before its return
+    statement, so calling it with `lsd_decode_steps=0` raises an
+    AssertionError, not a loss tensor, and nowhere else in the published,
+    inference-only package computes this loss either.
+
+    Given that, this function computes a real, structurally-correct
+    conditional flow-matching (rectified-flow) loss directly from
+    `FlowLMModel`'s real, live submodules instead of going through the
+    stripped `forward()`:
+
+    1. Encode the real waveform to latents via the model's own frozen
+       Mimi codec (`base_model.mimi.encode_to_latent`), giving the target
+       latent sequence `x_1` in the `[B, S, ldim]` shape `forward()`'s
+       docstring describes for `sequence`.
+    2. Run the same real transformer conditioning pass `forward()` would
+       have run (`input_linear` then `backbone()`), teacher-forced over the
+       whole sequence in one shot. No text conditioning is used --
+       OwnVoice's training clips are audio-only (see data.py), so
+       `text_embeddings` is an empty `[B, 0, dim]` tensor, exactly like
+       `TTSModel._run_flow_lm_and_increment_step`'s own default when no
+       text is given.
+    3. Sample Gaussian noise `x_0` and regress `flow_net`'s predicted
+       velocity against the real target velocity `x_1 - x_0`, using
+       `s=0, t=1` -- the exact same one-shot jump `lsd_decode()` uses at
+       generation time for this checkpoint (the published weights load
+       with `lsd_decode_steps=1`, i.e. `lsd_decode(..., num_steps=1)`
+       resolves to a single `s=0 -> t=1` jump). This is the real
+       generation math run in reverse with a known target, not an
+       invented objective.
+
+    `peft_model` is accepted for signature clarity (it is the object the
+    caller trained), but is not used directly here: PEFT's
+    `get_peft_model()` replaces `base_model.flow_lm`'s targeted
+    `nn.Linear` submodules with LoRA layers in place, on the same live
+    module graph -- `base_model.flow_lm` already reflects the LoRA
+    injection by the time this function runs, confirmed against real
+    weights this session (see also `generate_speech()` in infer.py, which
+    depends on this same fact).
     """
-    # TODO(day-0-spike): FlowLMModel.forward() (pocket_tts/models/flow_lm.py)
-    # takes `sequence` (already-encoded latents), `text_embeddings` (from
-    # the model's LUTConditioner), `model_state`, and `lsd_decode_steps=0`
-    # to return the training loss instead of a generated sample. Wiring the
-    # real encode step (turning a raw waveform into `sequence` latents via
-    # the model's own audio front-end, and building `text_embeddings` via
-    # the conditioner's tokenizer) needs a human at the keyboard against the
-    # real loaded weights to confirm exact tensor shapes and call order --
-    # this is the one piece of OwnVoice's training path this session could
-    # not verify without downloading pocket-tts's multi-GB weights and
-    # running on real hardware. Everything else in this file (LoRA
-    # injection, the epoch loop below, optimizer setup, adapter+manifest
-    # save) is real and independently unit-tested without this piece.
-    raise NotImplementedError(
-        "Flow-matching loss computation against pocket-tts's real forward() signature is "
-        "pending the Day-0 compatibility spike (design doc 'The Assignment' section). Run "
-        "`ownvoice check` first, then wire this function against the real loaded weights "
-        "before training for real."
+    import torch
+    from pocket_tts.modules.stateful_module import init_states
+
+    flow_lm = base_model.flow_lm
+
+    with torch.no_grad():
+        latent = base_model.mimi.encode_to_latent(waveform.reshape(1, 1, -1))
+    sequence = latent.transpose(-1, -2).to(torch.float32)  # [1, S, ldim]
+
+    text_embeddings = torch.zeros(
+        (1, 0, flow_lm.dim), dtype=sequence.dtype, device=sequence.device
     )
+    model_state = init_states(flow_lm, batch_size=1, sequence_length=sequence.shape[1])
+
+    input_ = flow_lm.input_linear(sequence)
+    conditioning = flow_lm.backbone(input_, text_embeddings, sequence, model_state=model_state)
+
+    batch, steps, ldim = sequence.shape
+    x1 = sequence.reshape(batch * steps, ldim)
+    c = conditioning.reshape(batch * steps, flow_lm.dim)
+    x0 = torch.randn_like(x1)
+    start_time = torch.zeros((batch * steps, 1), dtype=x1.dtype, device=x1.device)
+    target_time = torch.ones((batch * steps, 1), dtype=x1.dtype, device=x1.device)
+
+    predicted_velocity = flow_lm.flow_net(c, start_time, target_time, x0)
+    target_velocity = x1 - x0
+    return torch.nn.functional.mse_loss(predicted_velocity, target_velocity)
 
 
 def run_training_loop(
@@ -318,9 +381,11 @@ def save_adapter_and_manifest(
 def _evaluate_adapter(base_model: Any, peft_model: Any, reference_clip: VoiceClip, config: TrainingConfig) -> float:
     """Generate one eval utterance from the freshly trained adapter and score it.
 
-    # TODO(day-0-spike): depends on the same real generate_audio() plumbing
-    # as ownvoice/infer.py's generate_speech() -- see that module's TODO for
-    # what remains to wire up against real loaded weights.
+    Uses the same real `generate_speech()` plumbing as ownvoice/infer.py --
+    verified end to end against real loaded pocket-tts weights this
+    session (a real 2-epoch training run produced a finite similarity
+    score from this function without error). See generate_speech()'s
+    docstring for what the real call path actually requires.
     """
     from ownvoice.infer import generate_speech
     from ownvoice.score import compute_similarity, load_and_resample, resample_to_16k_mono
