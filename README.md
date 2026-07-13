@@ -1,5 +1,7 @@
 # OwnVoice
 
+[![PyPI](https://img.shields.io/pypi/v/ownvoice)](https://pypi.org/project/ownvoice/) [![npm](https://img.shields.io/npm/v/ownvoice)](https://www.npmjs.com/package/ownvoice)
+
 Train a LoRA voice adapter for [pocket-tts](https://github.com/kyutai-labs/pocket-tts) and keep the result: a file on your own disk, not an API subscription.
 
 ## Why this exists
@@ -19,7 +21,7 @@ OwnVoice exists for a narrower case: baking a voice permanently into trained wei
 Requires Python 3.11 or newer.
 
 ```bash
-pip install git+https://github.com/RudrenduPaul/ownvoice
+pip install ownvoice
 ```
 
 **npx / agent-native environments:** OwnVoice is a Python/PyTorch CLI, so the [npm package](https://www.npmjs.com/package/ownvoice) is a thin wrapper, not a Node reimplementation. It bootstraps into the real CLI via [`uv`](https://docs.astral.sh/uv/) or `pipx`, whichever is already on `PATH` -- useful for coding-agent sandboxes and CI runners that default to a Node toolchain.
