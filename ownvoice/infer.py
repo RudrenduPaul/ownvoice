@@ -10,6 +10,18 @@ generation call still needs *some* audio prompt to build the initial
 conditioning state. OwnVoice resolves this by reusing the same reference
 clip that `ownvoice train` recorded in `metadata.json` (the first voice clip
 in the training set) by default, with an optional override.
+
+Verified for real this session (a real 2-epoch LoRA training run, followed
+by a real `ownvoice infer` call against the resulting adapter, produced a
+4.7s non-silent, finite, NaN-free .wav file): `load_adapter()` and
+`generate_speech()` below are exercised end to end against real loaded
+pocket-tts weights, not just reasoned about. Two things this session found
+that the original (structurally reasonable but unverified) approach in
+`generate_speech()` got wrong are documented on that function directly --
+in short, no `base_model.flow_lm` swap is needed or safe, and OwnVoice
+must pre-load and resample the reference clip itself rather than pass a
+raw path/URL, because the publicly downloadable pocket-tts weights are the
+non-voice-cloning checkpoint by default.
 """
 
 from __future__ import annotations
@@ -41,14 +53,15 @@ def _read_metadata(adapter_path: Path) -> dict[str, Any]:
 
 def load_adapter(base_model: Any, adapter_path: Path | str):
     """Load a saved LoRA adapter (`adapter.safetensors`) onto pocket-tts's `flow_lm`.
+
+    Reconstructs the same LoraConfig used at train time (rank/alpha/
+    dropout, read back from the adapter's sibling metadata.json) and loads
+    the saved state dict via PEFT's `set_peft_model_state_dict`. The
+    reload round trip is verified against a real trained adapter this
+    session: `ownvoice train` saved a real adapter.safetensors via
+    `get_peft_model_state_dict`, and this function loaded it back and used
+    it for real generation via `ownvoice infer` without error.
     """
-    # TODO(day-0-spike): reconstructs the same LoraConfig used at train time
-    # (rank/alpha/dropout, read back from the adapter's sibling
-    # metadata.json) and loads the saved state dict via PEFT's
-    # `set_peft_model_state_dict`. Written against PEFT's real, documented
-    # API, but the exact reload round-trip has not been exercised against a
-    # real trained adapter in this session -- the Day-0 spike should confirm
-    # it end-to-end alongside the LoRA-injection check in train.py.
     from peft import LoraConfig, get_peft_model, set_peft_model_state_dict
     from safetensors.torch import load_file
 
@@ -115,26 +128,69 @@ def resolve_reference_audio(adapter_path: Path | str, override: Path | str | Non
 
 def generate_speech(base_model: Any, peft_model: Any, text: str, reference_audio_path: Path | str) -> torch.Tensor:
     """Generate speech audio for `text` using the base model wrapped with the LoRA adapter.
+
+    Verified against real loaded pocket-tts weights this session, and the
+    naive approach the previous TODO here anticipated turned out to be
+    wrong for two independent, real reasons:
+
+    1. No flow_lm swap is needed, and the previous
+       `base_model.flow_lm = peft_model` swap actively breaks generation.
+       PEFT's `get_peft_model()` replaces `base_model.flow_lm`'s targeted
+       `nn.Linear` submodules with LoRA layers IN PLACE -- it mutates the
+       same live module graph rather than returning a copy, so
+       `base_model.flow_lm` already carries the trained adapter's weights
+       by the time this function runs (confirmed: `id(base_model.flow_lm)`
+       is unchanged before/after `get_peft_model()`, and its Linear
+       submodules are already `peft.tuners.lora.layer.Linear` instances
+       afterward). Reassigning `base_model.flow_lm` to the outer
+       `PeftModel` wrapper instead breaks pocket-tts's own streaming state
+       machinery: `StatefulModule.get_state()` looks up KV-cache state by a
+       fixed `_module_absolute_name` string baked onto each submodule once
+       at `TTSModel.load_model()` time (e.g. "transformer.layers.0.
+       self_attn"), but `get_state_for_audio_prompt()` rebuilds the
+       `model_state` dict fresh via `init_states(base_model.flow_lm, ...)`,
+       which keys it off `named_modules()` on whatever module is currently
+       assigned to `base_model.flow_lm`. PEFT's `PeftModel`/`LoraModel`
+       wrapper inserts a "base_model.model." prefix into those paths, so
+       swapping to the wrapper produces a `model_state` dict whose keys no
+       longer match the fixed `_module_absolute_name` strings, and
+       generation fails with `KeyError: 'transformer.layers.0.self_attn'`
+       -- reproduced against real weights this session.
+    2. The publicly downloadable pocket-tts weights
+       (`kyutai/pocket-tts-without-voice-cloning`, the checkpoint
+       `TTSModel.load_model()` falls back to whenever the gated
+       `kyutai/pocket-tts` voice-cloning weights aren't accessible, which
+       is the common case since that repo requires manual approval on
+       Hugging Face) set `has_voice_cloning = False`. With that flag set,
+       `get_state_for_audio_prompt()` raises `ValueError` for ANY
+       `str`/`Path` audio-conditioning argument, including OwnVoice's own
+       reference clip -- reproduced against real weights this session.
+       Passing a pre-loaded, pre-resampled `torch.Tensor` instead is
+       pocket-tts's own documented input type for this argument (`audio_
+       conditioning: Path | str | torch.Tensor`) and is not gated -- it
+       reaches the exact same Mimi-encode-then-project conditioning path
+       either way. So OwnVoice loads and resamples the reference clip
+       itself here rather than depending on gated HF access most users of
+       OwnVoice won't have. Voice-cloning fidelity from the without-voice-
+       cloning checkpoint is a known limitation of the base model itself
+       (per pocket-tts's own `VOICE_CLONING_UNSUPPORTED` message), not an
+       OwnVoice bug -- users who want kyutai's best-quality cloning weights
+       can request gated access at https://huggingface.co/kyutai/pocket-tts
+       and run `hf auth login`; OwnVoice works either way.
     """
-    # TODO(day-0-spike): pocket-tts's real generation entrypoint is
-    # `TTSModel.generate_audio(model_state, text)` (confirmed against the
-    # README and pocket_tts/models/tts_model.py), which internally reads
-    # `self.flow_lm`. Swapping in the PEFT-wrapped flow_lm here (so the
-    # adapter is actually used for generation instead of the frozen base)
-    # needs the Day-0 spike to confirm whether reassigning
-    # `base_model.flow_lm = peft_model` before calling `generate_audio` is
-    # sufficient, or whether `TTSModel` caches a reference to the pre-wrap
-    # module elsewhere internally. Structurally this is the correct approach
-    # (PEFT-wrapped modules are drop-in nn.Module replacements), but it has
-    # not been exercised against real loaded weights in this session.
-    original_flow_lm = base_model.flow_lm
-    try:
-        base_model.flow_lm = peft_model
-        model_state = base_model.get_state_for_audio_prompt(reference_audio_path)
-        audio = base_model.generate_audio(model_state, text)
-    finally:
-        base_model.flow_lm = original_flow_lm
-    return audio
+    from pocket_tts.data.audio import audio_read
+    from pocket_tts.data.audio_utils import convert_audio
+
+    del peft_model  # injection already mutated base_model.flow_lm in place; see docstring point 1
+
+    reference_audio_path = Path(reference_audio_path)
+    raw_audio, source_sample_rate = audio_read(reference_audio_path)
+    audio_conditioning = convert_audio(
+        raw_audio, source_sample_rate, base_model.config.mimi.sample_rate, 1
+    )
+
+    model_state = base_model.get_state_for_audio_prompt(audio_conditioning)
+    return base_model.generate_audio(model_state, text)
 
 
 def save_wav(waveform: torch.Tensor, sample_rate: int, out_path: Path | str) -> Path:

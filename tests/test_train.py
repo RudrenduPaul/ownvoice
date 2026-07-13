@@ -1,11 +1,15 @@
 """Unit tests for ownvoice/train.py.
 
-Real LoRA injection against pocket-tts's actual weights, and the real
-training loop, are integration/manual-only
-(they need the real, multi-GB pocket-tts model and, for training, a GPU).
-What's unit-tested here: the caught-PEFT-exception path (mocked), the
-compatibility-check orchestration (mocked), and the adapter+manifest
-save/load round trip (real safetensors + json, no model needed).
+Running `ownvoice train` against pocket-tts's actual downloaded weights on
+a GPU is integration/manual-only. What's
+unit-tested here: the caught-PEFT-exception path (mocked), the
+compatibility-check orchestration (mocked), the adapter+manifest save/load
+round trip (real safetensors + json, no model needed), and
+`_compute_flow_matching_loss()`'s real math against a small fake
+pocket-tts-shaped model (real nn.Module forward/backward, no downloaded
+weights needed -- `pocket_tts` itself is a real, always-installed
+dependency of this package, so its lightweight `init_states()` helper is
+exercised for real too, only the multi-GB weights are faked out).
 """
 
 from __future__ import annotations
@@ -17,6 +21,7 @@ import torch
 from torch import nn
 
 from ownvoice.train import (
+    _compute_flow_matching_loss,
     CheckResult,
     PeftInjectionError,
     TrainingConfig,
@@ -199,3 +204,98 @@ def test_save_adapter_and_manifest_creates_out_dir(tmp_path: Path) -> None:
 
     assert config.out_dir.exists()
     assert (config.out_dir / "adapter.safetensors").exists()
+
+
+class _FakeFlowNet(nn.Module):
+    """Stands in for pocket-tts's SimpleMLPAdaLN: forward(c, s, t, x) -> predicted velocity."""
+
+    def __init__(self, ldim: int, dim: int) -> None:
+        super().__init__()
+        self.from_cond = nn.Linear(dim, ldim, bias=False)
+        self.from_x = nn.Linear(ldim, ldim, bias=False)
+
+    def forward(self, c: torch.Tensor, s: torch.Tensor, t: torch.Tensor, x: torch.Tensor) -> torch.Tensor:
+        del s, t  # unused in this fake -- the real flow_net uses them, this one doesn't need to
+        return self.from_cond(c) + self.from_x(x)
+
+
+class _FakeFlowLMForLoss(nn.Module):
+    """A small real nn.Module standing in for pocket-tts's FlowLMModel.
+
+    Matches the real class's public surface that `_compute_flow_matching_loss`
+    depends on: `.dim`, `.ldim`, `.input_linear`, `.backbone()`, `.flow_net`.
+    No `StatefulModule` submodules, so `init_states()` (the real pocket-tts
+    helper, not mocked) returns an empty dict for it -- fine, since this
+    fake `backbone()` doesn't need cache state to produce a shape-correct
+    result.
+    """
+
+    def __init__(self, ldim: int = 4, dim: int = 8) -> None:
+        super().__init__()
+        self.ldim = ldim
+        self.dim = dim
+        self.input_linear = nn.Linear(ldim, dim, bias=False)
+        self._backbone_proj = nn.Linear(dim, dim, bias=False)
+        self.flow_net = _FakeFlowNet(ldim, dim)
+
+    def backbone(self, input_, text_embeddings, sequence, model_state):
+        del text_embeddings, sequence, model_state  # unused in this fake
+        return self._backbone_proj(input_)
+
+
+class _FakeMimiForLoss:
+    """Stands in for pocket-tts's MimiModel.encode_to_latent: [B,1,T] -> [B,ldim,S]."""
+
+    def __init__(self, ldim: int, frame_size: int = 4) -> None:
+        self._conv = nn.Conv1d(1, ldim, kernel_size=frame_size, stride=frame_size, bias=False)
+
+    def encode_to_latent(self, waveform: torch.Tensor) -> torch.Tensor:
+        return self._conv(waveform)
+
+
+class _FakeBaseModelForLoss:
+    def __init__(self, ldim: int = 4, dim: int = 8) -> None:
+        self.flow_lm = _FakeFlowLMForLoss(ldim, dim)
+        self.mimi = _FakeMimiForLoss(ldim)
+
+
+def test_compute_flow_matching_loss_returns_finite_scalar_and_backprops() -> None:
+    """Real math, real backward pass, fake (small, undownloaded) pocket-tts model.
+
+    Exercises exactly the real call path `_compute_flow_matching_loss` uses
+    against real pocket-tts weights (mimi.encode_to_latent -> input_linear
+    -> backbone -> flow_net -> MSE against x1 - x0), just against a tiny
+    fake model instead of multi-GB downloaded weights, so this runs in CI.
+    """
+    base_model = _FakeBaseModelForLoss(ldim=4, dim=8)
+    config = TrainingConfig(voice_clips_dir=Path("unused"))
+    waveform = torch.randn(64)  # 1D, matching load_waveform()'s real return shape
+
+    loss = _compute_flow_matching_loss(peft_model=object(), base_model=base_model, waveform=waveform, config=config)
+
+    assert loss.dim() == 0
+    assert torch.isfinite(loss).item()
+
+    loss.backward()
+    trained_params = [base_model.flow_lm._backbone_proj.weight, base_model.flow_lm.flow_net.from_cond.weight]
+    for param in trained_params:
+        assert param.grad is not None
+        assert torch.isfinite(param.grad).all()
+
+
+def test_compute_flow_matching_loss_ignores_peft_model_argument() -> None:
+    """`peft_model` is accepted for signature clarity only -- base_model.flow_lm is what's used.
+
+    Passing something with no attributes at all must not matter, since PEFT's
+    in-place injection already mutated base_model.flow_lm before this is
+    called (see the function's docstring).
+    """
+    base_model = _FakeBaseModelForLoss()
+    config = TrainingConfig(voice_clips_dir=Path("unused"))
+    waveform = torch.randn(64)
+
+    loss = _compute_flow_matching_loss(
+        peft_model="not-a-model-at-all", base_model=base_model, waveform=waveform, config=config
+    )
+
+    assert torch.isfinite(loss).item()
