@@ -1,8 +1,7 @@
 """Unit tests for ownvoice/train.py.
 
 Running `ownvoice train` against pocket-tts's actual downloaded weights on
-a GPU is integration/manual-only. What's
-unit-tested here: the caught-PEFT-exception path (mocked), the
+a GPU is integration/manual-only. What's unit-tested here: the caught-PEFT-exception path (mocked), the
 compatibility-check orchestration (mocked), the adapter+manifest save/load
 round trip (real safetensors + json, no model needed), and
 `_compute_flow_matching_loss()`'s real math against a small fake
