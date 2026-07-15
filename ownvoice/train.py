@@ -1,8 +1,8 @@
 """LoRA adapter training for pocket-tts: injection, training loop, save.
 
-Architecture note: single-
-target-by-design. Model loading is hardcoded to pocket-tts; there is no
-`BaseModelAdapter` abstraction, because no second base model is in scope.
+Architecture note: single-target-by-design. Model loading is hardcoded to
+pocket-tts; there is no `BaseModelAdapter` abstraction, because no second
+base model is in scope.
 
 Real-API notes from researching kyutai-labs/pocket-tts directly (README +
 source, not guessed): the package is `pocket-tts` on PyPI (Python 3.10+,
