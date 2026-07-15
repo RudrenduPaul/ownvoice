@@ -1,8 +1,8 @@
 """LoRA adapter training for pocket-tts: injection, training loop, save.
 
-Architecture note (locked by /plan-[redacted], see design doc): single-
-target-by-design. Model loading is hardcoded to pocket-tts; there is no
-`BaseModelAdapter` abstraction, because no second base model is in scope.
+Architecture note: single-target-by-design. Model loading is hardcoded to
+pocket-tts; there is no `BaseModelAdapter` abstraction, because no second
+base model is in scope.
 
 Real-API notes from researching kyutai-labs/pocket-tts directly (README +
 source, not guessed): the package is `pocket-tts` on PyPI (Python 3.10+,
@@ -64,8 +64,7 @@ class PeftInjectionError(Exception):
     """Raised when PEFT LoRA injection fails against pocket-tts's actual layers.
 
     Carries the real module tree (via named_modules()) so the caller can
-    print it for debugging instead of a raw stack trace, per the locked
-    [redacted] decision.
+    print it for debugging instead of a raw stack trace.
     """
 
     def __init__(self, message: str, module_tree: str):
@@ -145,7 +144,7 @@ def inject_lora(
     Targets every `nn.Linear` layer ("all-linear") in the flow language
     model. If PEFT raises, catch it, attach the real module tree, and raise
     PeftInjectionError so the caller can print an actionable message instead
-    of a raw stack trace (locked [redacted] decision #4).
+    of a raw stack trace.
     """
     from peft import LoraConfig, get_peft_model
 
@@ -172,9 +171,10 @@ def inject_lora(
 def check_compatibility() -> CheckResult:
     """CPU-only, no-GPU, no-training dry run: load the base model, attempt LoRA injection.
 
-    This is the free Day-0-style validation `ownvoice check` runs (the
-    "Champion-tier" DX moment from the design doc's DX review) -- it never
-    touches a GPU and never runs a training step.
+    This is the free Day-0-style validation `ownvoice check` runs -- a fast
+    signal that surfaces a broken LoRA injection before a user burns GPU
+    time on a doomed training run -- it never touches a GPU and never runs
+    a training step.
     """
     try:
         model = load_base_model(device="cpu")
@@ -283,9 +283,9 @@ def run_training_loop(
 ) -> dict[str, Any]:
     """Run the LoRA fine-tuning loop against the loaded voice clips.
 
-    Integration/manual-only per the [redacted]: this needs the
-    real pocket-tts base model and (for a real run) a rented GPU, so it
-    can't be meaningfully unit-tested in CI. `ownvoice train` calls this for
+    Integration/manual-only: this needs the real pocket-tts base model and
+    (for a real run) a rented GPU, so it can't be meaningfully unit-tested
+    in CI. `ownvoice train` calls this for
     real, gated behind a successful check_compatibility() first.
     """
     import torch
@@ -337,8 +337,8 @@ def save_adapter_and_manifest(
     so this function is unit-testable without a real PEFT model or GPU.
 
     The manifest is a free byproduct of a training run that's happening
-    anyway (locked [redacted] decision #3), not a durable-infrastructure
-    investment: training config, the similarity score, and a timestamp.
+    anyway, not a durable-infrastructure investment: training config, the
+    similarity score, and a timestamp.
     """
     import json
     from datetime import datetime, timezone
@@ -400,8 +400,8 @@ def train(config: TrainingConfig) -> TrainResult:
     """End-to-end train flow used by `ownvoice train`.
 
     Loads the base model, attempts LoRA injection (catching and reporting a
-    PeftInjectionError distinctly from other failures per the locked
-    [redacted] decision), runs the training loop, generates one eval
+    PeftInjectionError distinctly from other failures), runs the training
+    loop, generates one eval
     utterance, scores it against a reference clip, and always writes
     `adapter.safetensors` + `metadata.json` on a successful run -- whether
     or not the similarity score clears the usable threshold. A below-
