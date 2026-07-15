@@ -2,9 +2,9 @@
 
 Deliberately does not exercise compute_similarity() end-to-end, since that
 requires downloading Resemblyzer's pretrained encoder weights -- exactly the
-kind of network-dependent integration path the [redacted] marks
-manual/integration-only. cosine_similarity() (the pure math) and is_usable()
-(the threshold logic) are unit-tested directly instead.
+kind of network-dependent integration path that's manual/integration-only.
+cosine_similarity() (the pure math) and is_usable() (the threshold logic)
+are unit-tested directly instead.
 """
 
 from __future__ import annotations
