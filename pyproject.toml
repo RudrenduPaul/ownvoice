@@ -4,12 +4,13 @@ build-backend = "hatchling.build"
 
 [project]
 name = "ownvoice"
-version = "0.1.0"
+version = "0.1.1"
 description = "Train a LoRA voice adapter for pocket-tts and own the resulting model, no API lock-in."
 readme = "README.md"
 license = { text = "MIT" }
 authors = [
     { name = "Rudrendu Paul" },
+    { name = "Sourav Nandy" },
 ]
 requires-python = ">=3.11"
 keywords = ["tts", "text-to-speech", "voice-cloning", "lora", "peft", "pocket-tts", "fine-tuning"]
@@ -47,6 +48,8 @@ dev = [
 Homepage = "https://github.com/RudrenduPaul/ownvoice"
 Repository = "https://github.com/RudrenduPaul/ownvoice"
 Issues = "https://github.com/RudrenduPaul/ownvoice/issues"
+"Author - Rudrendu Paul" = "https://github.com/RudrenduPaul"
+"Author - Sourav Nandy" = "https://github.com/Sourav-nandy-ai"
 
 [project.scripts]
 ownvoice = "ownvoice.cli:app"
