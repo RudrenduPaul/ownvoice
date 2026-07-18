@@ -2,6 +2,19 @@
 'use strict';
 
 const { spawnSync } = require('node:child_process');
+const path = require('node:path');
+
+// Pinned to this npm package's own version, not left floating: an unqualified
+// "uvx ownvoice"/"pipx run ownvoice" always fetches whatever is currently
+// newest on PyPI. That decouples what a user actually installed (this npm
+// package, a fixed point in time) from what runs on their machine (PyPI's
+// latest, which changes underneath them and could be a compromised or
+// unintended publish) -- a supply-chain determinism gap. Pinning to this
+// package's own version keeps the two registries in lockstep: bump this
+// package.json's version when PyPI's ownvoice ships a new release, and every
+// subsequent invocation resolves to that exact pinned release, not whatever
+// is newest at run time.
+const PACKAGE_VERSION = require(path.join(__dirname, '..', 'package.json')).version;
 
 function commandExists(cmd) {
   const probe = process.platform === 'win32' ? 'where' : 'which';
@@ -26,8 +39,8 @@ const args = process.argv.slice(2);
 // install path (`uvx ownvoice train ...`) and increasingly present by default
 // in agent and CI sandboxes.
 const runners = [
-  { cmd: 'uvx', build: (a) => ['ownvoice', ...a] },
-  { cmd: 'pipx', build: (a) => ['run', 'ownvoice', ...a] },
+  { cmd: 'uvx', build: (a) => [`ownvoice==${PACKAGE_VERSION}`, ...a] },
+  { cmd: 'pipx', build: (a) => ['run', `ownvoice==${PACKAGE_VERSION}`, ...a] },
 ];
 
 for (const runner of runners) {
