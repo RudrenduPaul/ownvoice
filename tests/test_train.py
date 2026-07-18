@@ -148,6 +148,9 @@ def test_check_compatibility_peft_injection_failure_is_caught(monkeypatch) -> No
 def test_save_adapter_and_manifest_writes_both_files(tmp_path: Path) -> None:
     state_dict = {"lora_A.weight": torch.randn(4, 2), "lora_B.weight": torch.randn(2, 4)}
     config = TrainingConfig(voice_clips_dir=tmp_path / "clips", out_dir=tmp_path / "out")
+    clip_path = tmp_path / "clips" / "clip_a.wav"
+    clip_path.parent.mkdir(parents=True, exist_ok=True)
+    clip_path.write_bytes(b"fake-wav-bytes")
 
     result_dir = save_adapter_and_manifest(
         state_dict,
@@ -156,7 +159,7 @@ def test_save_adapter_and_manifest_writes_both_files(tmp_path: Path) -> None:
         similarity_score=0.82,
         metrics={"final_loss": 0.1, "epochs": 3},
         timestamp="2026-07-12T00:00:00+00:00",
-        reference_clip=tmp_path / "clips" / "clip_a.wav",
+        reference_clip=clip_path,
     )
 
     assert result_dir == config.out_dir
@@ -179,7 +182,12 @@ def test_save_adapter_and_manifest_writes_both_files(tmp_path: Path) -> None:
     assert metadata["config"]["epochs"] == config.epochs
     assert metadata["config"]["lora_rank"] == config.lora_rank
     assert metadata["metrics"]["final_loss"] == 0.1
-    assert metadata["reference_clip"].endswith("clip_a.wav")
+    # reference_clip is now stored as a bare filename, since save_adapter_and_manifest
+    # copies the clip into out_dir so infer.py's containment check (which only trusts
+    # a path resolving inside the adapter's own directory) is satisfied by construction.
+    assert metadata["reference_clip"] == "clip_a.wav"
+    assert (config.out_dir / "clip_a.wav").exists()
+    assert (config.out_dir / "clip_a.wav").read_bytes() == b"fake-wav-bytes"
 
 
 def test_save_adapter_and_manifest_below_threshold_is_usable_false(tmp_path: Path) -> None:
