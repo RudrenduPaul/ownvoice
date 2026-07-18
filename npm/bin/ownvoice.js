@@ -2,6 +2,9 @@
 'use strict';
 
 const { spawnSync } = require('node:child_process');
+const path = require('node:path');
+
+const { version } = require(path.join(__dirname, '..', 'package.json'));
 
 function commandExists(cmd) {
   const probe = process.platform === 'win32' ? 'where' : 'which';
@@ -25,9 +28,16 @@ const args = process.argv.slice(2);
 // is already on PATH, preferring uv/uvx since that's the primary documented
 // install path (`uvx ownvoice train ...`) and increasingly present by default
 // in agent and CI sandboxes.
+//
+// Pinned to this npm package's own version rather than an unqualified
+// `ownvoice` package name -- an unpinned uvx/pipx invocation always fetches
+// PyPI's current `latest` at run time, so a compromised publish there would
+// execute on every user of this wrapper instantly, with no diff or review
+// step in between. Keep npm's package.json version in sync with the PyPI
+// release it's meant to pin to.
 const runners = [
-  { cmd: 'uvx', build: (a) => ['ownvoice', ...a] },
-  { cmd: 'pipx', build: (a) => ['run', 'ownvoice', ...a] },
+  { cmd: 'uvx', build: (a) => [`ownvoice==${version}`, ...a] },
+  { cmd: 'pipx', build: (a) => ['run', `ownvoice==${version}`, ...a] },
 ];
 
 for (const runner of runners) {
