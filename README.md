@@ -1,3 +1,10 @@
+# OwnVoice -- renamed to ownvoice-cli
+
+**This PyPI package has been renamed.** Install [`ownvoice-cli`](https://pypi.org/project/ownvoice-cli/)
+instead: `pip install ownvoice-cli`. This package will not receive further updates.
+
+---
+
 # OwnVoice
 
 [![PyPI](https://img.shields.io/pypi/v/ownvoice)](https://pypi.org/project/ownvoice/) [![npm](https://img.shields.io/npm/v/ownvoice)](https://www.npmjs.com/package/ownvoice)
