@@ -341,6 +341,7 @@ def save_adapter_and_manifest(
     similarity score, and a timestamp.
     """
     import json
+    import shutil
     from datetime import datetime, timezone
 
     from safetensors.torch import save_file
@@ -361,6 +362,18 @@ def save_adapter_and_manifest(
     adapter_path = out_dir / "adapter.safetensors"
     save_file(state_dict, str(adapter_path))
 
+    # infer.py's resolve_reference_audio() only trusts a reference_clip path from
+    # metadata.json if it resolves *inside* this same out_dir -- a deliberate guard
+    # against a maliciously-crafted metadata.json shipped alongside a shared adapter.
+    # The clip's original path (typically a sibling --voice-clips directory) fails
+    # that check by construction, so copy the clip into out_dir itself and record
+    # just its filename, making the adapter directory fully self-contained.
+    reference_clip_name = None
+    if reference_clip is not None:
+        reference_clip_path = Path(reference_clip)
+        reference_clip_name = reference_clip_path.name
+        shutil.copy2(reference_clip_path, out_dir / reference_clip_name)
+
     resolved_timestamp = timestamp or datetime.now(timezone.utc).isoformat()
     metadata = {
         "ownvoice_version": __version__,
@@ -370,7 +383,7 @@ def save_adapter_and_manifest(
         "usable_threshold": USABLE_THRESHOLD,
         "metrics": metrics or {},
         "timestamp": resolved_timestamp,
-        "reference_clip": str(reference_clip) if reference_clip is not None else None,
+        "reference_clip": reference_clip_name,
     }
     metadata_path = out_dir / "metadata.json"
     metadata_path.write_text(json.dumps(metadata, indent=2))
