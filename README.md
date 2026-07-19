@@ -36,6 +36,8 @@ npx ownvoice check
 
 ## Quickstart
 
+![Terminal recording of installing ownvoice-cli with pip into a fresh virtual environment, then running `ownvoice --version` and `ownvoice --help` to show the real CLI and its three subcommands.](docs/demo.gif)
+
 ### 1. `ownvoice check`, the free Day-0 validation
 
 Before recording anything or renting a GPU, confirm that PEFT's LoRA injection actually works against pocket-tts's real model structure. This is entirely free: CPU only, no training, no GPU.
@@ -98,6 +100,8 @@ $ ownvoice check --json
 {"success": true, "message": "PEFT LoRA injection succeeded against pocket-tts's flow_lm module (target_modules=\"all-linear\").", "module_tree": null}
 ```
 
+![Terminal recording of running `ownvoice check --json` for structured, agent-parseable output, then `ownvoice train --help` to show the real training flags and their defaults.](docs/usage.gif)
+
 ## How it works
 
 ```
@@ -141,6 +145,29 @@ OwnVoice's own training run is real GPU time, honestly labeled and not hidden be
 ## Implementation status
 
 This is a young v0.1. `ownvoice check`, the CLI argument parsing, voice-clip validation, the similarity scoring math, and the adapter/manifest save and load path are implemented and covered by the test suite (`pytest`). LoRA injection was verified structurally against pocket-tts's real source and then confirmed for real: `ownvoice check` was run against pocket-tts's actual downloaded weights, on CPU, and PEFT's `target_modules="all-linear"` injection genuinely succeeded. The full training and generation path has since been verified end to end for real too: a real 2-epoch LoRA training run against loaded pocket-tts weights produced a finite, non-NaN flow-matching loss, and the resulting adapter produced a real, non-silent generated `.wav` file via `ownvoice infer`. That validation surfaced two real gaps in the naive approach and fixed them: (1) pocket-tts's published, inference-only PyPI package does not actually expose a way to compute the training loss through `FlowLMModel.forward()` despite its own docstring claiming otherwise, so OwnVoice computes the flow-matching loss directly from `flow_lm`'s real submodules instead; (2) swapping `base_model.flow_lm` to the PEFT-wrapped model before calling `generate_audio()` breaks pocket-tts's internal KV-cache state lookup -- no swap is needed at all, since PEFT's LoRA injection already mutates `base_model.flow_lm` in place. One real, external limitation to know about: the publicly downloadable pocket-tts weights (`kyutai/pocket-tts-without-voice-cloning`) refuse a raw reference-clip path/URL outright; OwnVoice works around this by pre-loading and resampling the clip itself, but voice-cloning fidelity from that checkpoint is a known limitation of the base model, not an OwnVoice bug -- for kyutai's best-quality cloning weights, request gated access at [huggingface.co/kyutai/pocket-tts](https://huggingface.co/kyutai/pocket-tts). Run `ownvoice check` yourself and read the source before trusting any of it further, that is the right amount of skepticism for a v0.1.
+
+## FAQ
+
+**What is OwnVoice, and why not just use pocket-tts by itself?**
+OwnVoice trains a LoRA adapter for [pocket-tts](https://github.com/kyutai-labs/pocket-tts) and saves it to your own disk as `adapter.safetensors` plus `metadata.json`. It exists because pocket-tts's own maintainers have said fine-tuning code is not on their near-term roadmap (see [issue #30](https://github.com/kyutai-labs/pocket-tts/issues/30)). Once you have a trained adapter, you never need OwnVoice again to use it: `ownvoice infer` just loads the adapter back onto the base model.
+
+**How is this different from pocket-tts's own built-in `--voice <wav>` zero-shot cloning?**
+pocket-tts already clones a voice from a single reference clip with no training step, `--voice <wav>` at the CLI or `get_state_for_audio_prompt()` in Python. OwnVoice trades that speed for a permanently trained adapter, so generation no longer depends on carrying around a reference clip at runtime, with (based on the training objective, not yet independently benchmarked at scale) more consistent output across repeated generations than a single-clip zero-shot embedding tends to give. If zero-shot is enough for your use case, use pocket-tts directly, it is simpler and faster.
+
+**What do I need to install it, and does it run on Apple Silicon or a CPU-only machine?**
+Python 3.11 or newer, then `pip install ownvoice-cli`. `ownvoice check` and `ownvoice infer` need no GPU at all and run fine on Apple Silicon or a CPU-only machine, matching pocket-tts's own CPU-capable design. `ownvoice train` runs on CPU too, it just takes longer per epoch; install the CUDA build of PyTorch first if you have an NVIDIA GPU and want training to go faster.
+
+**How does OwnVoice compare to kokoro-tts and Unsloth?**
+[kokoro-tts](https://github.com/nazdridoy/kokoro-tts) gets you synthesizing speech in under 2 minutes but has no fine-tuning step at all. [Unsloth](https://unsloth.ai) gets a training run started in under a minute but is a general LLM fine-tuning framework, not TTS-specific. OwnVoice is narrower than either: one base model (pocket-tts only), one job (a voice adapter), plus a free `ownvoice check` step that confirms PEFT's LoRA injection actually works against your environment before you spend anything on a GPU, a check neither of those tools has an equivalent of.
+
+**My training run finished but printed "BELOW THRESHOLD", is that a bug?**
+No. It is a labeled outcome, not a crash, `ownvoice train` exits `0` either way. Below the 0.75 cosine-similarity bar, the adapter is still saved to disk and OwnVoice tells you plainly to try more or cleaner voice clips, more epochs, or a higher `--lora-rank`, then re-run. Only two things actually fail the command with a non-zero exit: no usable clips to load, or a caught PEFT-injection failure.
+
+**Can I use OwnVoice, and the adapters it produces, commercially?**
+OwnVoice's own code is MIT (see [LICENSE](LICENSE)). pocket-tts's code package is MIT too, but the model weights OwnVoice actually downloads and trains against, [`kyutai/pocket-tts-without-voice-cloning`](https://huggingface.co/kyutai/pocket-tts-without-voice-cloning) and the gated [`kyutai/pocket-tts`](https://huggingface.co/kyutai/pocket-tts), are licensed CC-BY-4.0, not MIT. CC-BY-4.0 permits commercial use but requires attribution to Kyutai. Since any adapter you train is derived from those weights, check that attribution requirement before shipping a commercial product built on it.
+
+**Whose voice can I actually clone with this?**
+Only your own, or someone else's with their explicit, checked consent, never a public figure's voice without it. See [Consent and misuse](#consent-and-misuse) above. OwnVoice ships no bulk-generation or auto-scaling feature in this version, which keeps the blast radius of any single misuse case small.
 
 ## Contributing
 
