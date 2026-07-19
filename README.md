@@ -24,13 +24,13 @@ Requires Python 3.11 or newer.
 pip install ownvoice-cli
 ```
 
-**npx / agent-native environments:** OwnVoice is a Python/PyTorch CLI, so the [npm package](https://www.npmjs.com/package/ownvoice) is a thin wrapper, not a Node reimplementation. It bootstraps into the real CLI via [`uv`](https://docs.astral.sh/uv/) or `pipx`, whichever is already on `PATH` -- useful for coding-agent sandboxes and CI runners that default to a Node toolchain.
+**npx / agent-native environments:** OwnVoice is a Python/PyTorch CLI, so the [npm package](https://www.npmjs.com/package/ownvoice-cli) is a thin wrapper, not a Node reimplementation. It bootstraps into the real CLI via [`uv`](https://docs.astral.sh/uv/) or `pipx`, whichever is already on `PATH` -- useful for coding-agent sandboxes and CI runners that default to a Node toolchain. The npm package was renamed to `ownvoice-cli` (from the old plain `ownvoice`, now deprecated) to match its PyPI counterpart.
 
 ```bash
-npx ownvoice check
+npx ownvoice-cli check
 ```
 
-**Not functional yet:** the npm wrapper is published and installable, but it delegates to `uvx ownvoice`, and OwnVoice itself is not yet published to PyPI (`pip install git+...` above is the only working install path today). `npx ownvoice` will fail with a clear "package not found" error from `uv` until the PyPI release ships.
+Both the npm wrapper and the PyPI package (`ownvoice-cli`) are live, so the command above works today.
 
 **Torch and CUDA:** `ownvoice check` (see below) needs no GPU at all and runs on CPU, matching pocket-tts's own CPU-capable design. Training a real adapter is much faster on an NVIDIA GPU. If you have one, install the CUDA build of PyTorch first by following [pytorch.org/get-started/locally](https://pytorch.org/get-started/locally/), then install OwnVoice on top of it, so `pip` does not silently pull the CPU-only wheel instead. On Apple Silicon or a CPU-only machine, the default `pip install` of torch is fine: `ownvoice check` and `ownvoice infer` will run normally, `ownvoice train` will just take longer per epoch.
 
