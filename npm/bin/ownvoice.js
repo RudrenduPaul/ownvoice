@@ -34,13 +34,16 @@ const args = process.argv.slice(2);
 
 // ownvoice is a Python/PyTorch package (LoRA fine-tuning on top of pocket-tts).
 // This wrapper never bundles a platform binary -- there isn't one to bundle --
-// it bootstraps into the real ownvoice Python CLI via whichever Python runner
-// is already on PATH, preferring uv/uvx since that's the primary documented
-// install path (`uvx ownvoice train ...`) and increasingly present by default
-// in agent and CI sandboxes.
+// it bootstraps into the real ownvoice-cli Python CLI via whichever Python
+// runner is already on PATH, preferring uv/uvx since that's the primary
+// documented install path (`uvx --from ownvoice-cli ownvoice train ...`) and
+// increasingly present by default in agent and CI sandboxes. The PyPI package
+// is named ownvoice-cli, but its console-script entry point is still the
+// shorter `ownvoice` -- --from pins which package/version to run from,
+// separately from which command inside it to invoke.
 const runners = [
-  { cmd: 'uvx', build: (a) => [`ownvoice==${PACKAGE_VERSION}`, ...a] },
-  { cmd: 'pipx', build: (a) => ['run', `ownvoice==${PACKAGE_VERSION}`, ...a] },
+  { cmd: 'uvx', build: (a) => ['--from', `ownvoice-cli==${PACKAGE_VERSION}`, 'ownvoice', ...a] },
+  { cmd: 'pipx', build: (a) => ['run', '--spec', `ownvoice-cli==${PACKAGE_VERSION}`, 'ownvoice', ...a] },
 ];
 
 for (const runner of runners) {
@@ -63,8 +66,8 @@ console.error(
     '  - uv (recommended):  https://docs.astral.sh/uv/getting-started/installation/',
     '  - pipx:              https://pipx.pypa.io/stable/installation/',
     '',
-    'Or install ownvoice directly with pip:',
-    '  pip install ownvoice',
+    'Or install ownvoice-cli directly with pip:',
+    '  pip install ownvoice-cli',
   ].join('\n')
 );
 process.exit(1);
