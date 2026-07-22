@@ -1,6 +1,6 @@
 # OwnVoice
 
-[![PyPI](https://img.shields.io/pypi/v/ownvoice-cli)](https://pypi.org/project/ownvoice-cli/) [![npm](https://img.shields.io/npm/v/ownvoice)](https://www.npmjs.com/package/ownvoice)
+[![PyPI](https://img.shields.io/pypi/v/ownvoice-cli)](https://pypi.org/project/ownvoice-cli/) [![npm](https://img.shields.io/npm/v/ownvoice-cli)](https://www.npmjs.com/package/ownvoice-cli)
 
 Train a LoRA voice adapter for [pocket-tts](https://github.com/kyutai-labs/pocket-tts) and keep the result: a file on your own disk, not an API subscription.
 
