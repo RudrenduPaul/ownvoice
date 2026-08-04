@@ -1,7 +1,7 @@
 {
   "name": "ownvoice-cli",
-  "version": "0.1.2",
-  "description": "Train a LoRA voice adapter for pocket-tts and own the resulting model, no API lock-in. npx-installable wrapper around the ownvoice Python CLI, for agent and Node-first environments.",
+  "version": "0.1.4",
+  "description": "Train a LoRA voice adapter for pocket-tts and keep the result on your own disk, not an API subscription. npx-installable wrapper around the ownvoice Python CLI for agent and Node-first environments.",
   "bin": {
     "ownvoice": "bin/ownvoice.js"
   },
@@ -17,7 +17,9 @@
     "pocket-tts",
     "fine-tuning",
     "cli",
-    "agent-native"
+    "agent-native",
+    "local-first",
+    "pytorch"
   ],
   "license": "MIT",
   "author": "Rudrendu Paul",

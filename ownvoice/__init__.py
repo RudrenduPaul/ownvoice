@@ -5,6 +5,6 @@ text-to-speech) with a LoRA fine-tuning workflow. The output is an adapter
 file you keep and run yourself, not an API subscription.
 """
 
-__version__ = "0.1.2"
+__version__ = "0.1.4"
 
 __all__ = ["__version__"]
