@@ -1,30 +1,42 @@
 # OwnVoice
 
-[![PyPI](https://img.shields.io/pypi/v/ownvoice-cli)](https://pypi.org/project/ownvoice-cli/) [![npm](https://img.shields.io/npm/v/ownvoice-cli)](https://www.npmjs.com/package/ownvoice-cli)
-
 Train a LoRA voice adapter for [pocket-tts](https://github.com/kyutai-labs/pocket-tts) and keep the result: a file on your own disk, not an API subscription.
 
-## Why this exists
+[![PyPI](https://img.shields.io/pypi/v/ownvoice-cli)](https://pypi.org/project/ownvoice-cli/)
+[![npm](https://img.shields.io/npm/v/ownvoice-cli)](https://www.npmjs.com/package/ownvoice-cli)
+[![License: MIT](https://img.shields.io/github/license/RudrenduPaul/ownvoice)](https://github.com/RudrenduPaul/ownvoice/blob/main/LICENSE)
 
-pocket-tts is a genuinely good, MIT-licensed, CPU-capable local text-to-speech model from Kyutai. Its own maintainers have been clear that fine-tuning code isn't coming any time soon: on [issue #30](https://github.com/kyutai-labs/pocket-tts/issues/30), maintainer @vvolhejn wrote "We are not planning to release fine-tuning code for our TTS and STT models in the near future," and 18 people reacted to that thread asking for exactly this. OwnVoice is a small, standalone CLI that fills that specific gap: point it at a handful of your own voice recordings, and it trains a LoRA adapter you keep and run yourself.
-
-It is not a hosted service, it has no billing, and it does not track usage. It is a training script, an inference script, and a scoring script, wired together behind three CLI commands.
-
-## What OwnVoice is not
-
-pocket-tts already ships zero-shot voice cloning out of the box: pass a `.wav` file to `--voice` (or call `get_state_for_audio_prompt()` from Python) and it clones that voice with no training step at all. If that is all you need, use pocket-tts directly, it is simpler and faster.
-
-OwnVoice exists for a narrower case: baking a voice permanently into trained weights, so generation no longer depends on distributing or re-processing a reference audio clip at runtime, with (based on the training objective, not yet independently benchmarked at scale) more consistent output across many generations than a single-clip zero-shot embedding tends to produce. That is the specific gap the 18 reactors on issue #30 were describing, and it is the only thing OwnVoice adds on top of what pocket-tts already does well.
-
-## Install
-
-Requires Python 3.11 or newer.
+![Terminal recording of installing ownvoice-cli with pip into a fresh virtual environment, then running `ownvoice --version` and `ownvoice --help` to show the real CLI and its three subcommands.](https://raw.githubusercontent.com/RudrenduPaul/ownvoice/main/docs/demo.gif)
 
 ```bash
 pip install ownvoice-cli
 ```
 
-**npx / agent-native environments:** OwnVoice is a Python/PyTorch CLI, so the [npm package](https://www.npmjs.com/package/ownvoice-cli) is a thin wrapper, not a Node reimplementation. It bootstraps into the real CLI via [`uv`](https://docs.astral.sh/uv/) or `pipx`, whichever is already on `PATH` -- useful for coding-agent sandboxes and CI runners that default to a Node toolchain. The npm package was renamed to `ownvoice-cli` (from the old plain `ownvoice`, now deprecated) to match its PyPI counterpart.
+Requires Python 3.11 or newer. See [Install](#install) below for the npx / agent-sandbox path.
+
+## Table of Contents
+
+- [Install](#install)
+- [Quickstart](#quickstart)
+- [CLI Reference](#cli-reference)
+- [Features](#features)
+- [How It Works](#how-it-works)
+- [Setup-Time Benchmark vs Comparable Tools](#setup-time-benchmark-vs-comparable-tools)
+- [Why OwnVoice Exists](#why-ownvoice-exists)
+- [What OwnVoice Is Not](#what-ownvoice-is-not)
+- [Consent and Misuse](#consent-and-misuse)
+- [Implementation Status](#implementation-status)
+- [FAQ](#faq)
+- [Contributing](#contributing)
+- [License](#license)
+
+## Install
+
+```bash
+pip install ownvoice-cli
+```
+
+**npx / agent-native environments:** OwnVoice is a Python/PyTorch CLI, so the [npm package](https://www.npmjs.com/package/ownvoice-cli) is a thin wrapper, not a Node reimplementation. It bootstraps into the real CLI via [`uv`](https://docs.astral.sh/uv/) or `pipx`, whichever is already on `PATH`, useful for coding-agent sandboxes and CI runners that default to a Node toolchain. The npm package was renamed to `ownvoice-cli` (from the old plain `ownvoice`, now deprecated) to match its PyPI counterpart.
 
 ```bash
 npx ownvoice-cli check
@@ -32,11 +44,9 @@ npx ownvoice-cli check
 
 Both the npm wrapper and the PyPI package (`ownvoice-cli`) are live, so the command above works today.
 
-**Torch and CUDA:** `ownvoice check` (see below) needs no GPU at all and runs on CPU, matching pocket-tts's own CPU-capable design. Training a real adapter is much faster on an NVIDIA GPU. If you have one, install the CUDA build of PyTorch first by following [pytorch.org/get-started/locally](https://pytorch.org/get-started/locally/), then install OwnVoice on top of it, so `pip` does not silently pull the CPU-only wheel instead. On Apple Silicon or a CPU-only machine, the default `pip install` of torch is fine: `ownvoice check` and `ownvoice infer` will run normally, `ownvoice train` will just take longer per epoch.
+**Torch and CUDA:** `ownvoice check` needs no GPU at all and runs on CPU, matching pocket-tts's own CPU-capable design. Training a real adapter is much faster on an NVIDIA GPU. If you have one, install the CUDA build of PyTorch first by following [pytorch.org/get-started/locally](https://pytorch.org/get-started/locally/), then install OwnVoice on top of it, so `pip` does not silently pull the CPU-only wheel instead. On Apple Silicon or a CPU-only machine, the default `pip install` of torch is fine: `ownvoice check` and `ownvoice infer` run normally, `ownvoice train` just takes longer per epoch.
 
 ## Quickstart
-
-![Terminal recording of installing ownvoice-cli with pip into a fresh virtual environment, then running `ownvoice --version` and `ownvoice --help` to show the real CLI and its three subcommands.](https://raw.githubusercontent.com/RudrenduPaul/ownvoice/main/docs/demo.gif)
 
 ### 1. `ownvoice check`, the free Day-0 validation
 
@@ -64,7 +74,7 @@ transformer.layers.0.self_attn.out_proj: Linear
 
 ### 2. `ownvoice train`
 
-Record 5 to 10 minutes of clean audio of the voice you want to train (your own voice, with your own consent, see Consent and misuse below), split into a few `.wav` clips in one directory, then point OwnVoice at it:
+Record 5 to 10 minutes of clean audio of the voice you want to train (your own voice, with your own consent, see [Consent and misuse](#consent-and-misuse)), split into a few `.wav` clips in one directory, then point OwnVoice at it:
 
 ```
 $ ownvoice train --voice-clips ./my-voice-clips
@@ -73,7 +83,7 @@ Usable adapter (similarity 0.812 >= 0.75). Try it now:
   ownvoice infer --adapter ownvoice-adapter/adapter.safetensors --text "This is my own voice, trained with OwnVoice."
 ```
 
-Only `--voice-clips` is required. Every other flag has a sensible default: `--out` (`./ownvoice-adapter/`), `--epochs` (10), `--lora-rank` (8), `--lora-alpha` (16), `--lora-dropout` (0.05), `--learning-rate` (1e-4), and `--eval-text` (the sentence synthesized to compute the similarity score).
+Only `--voice-clips` is required. Every other flag has a sensible default (see the full [CLI Reference](#cli-reference) below).
 
 A run that finishes but does not clear the similarity bar still exits `0`. It is a labeled result with a concrete next step, not a crash:
 
@@ -84,7 +94,7 @@ Below threshold (similarity 0.612 < 0.75). The adapter was still saved, try more
   ownvoice infer --adapter ownvoice-adapter/adapter.safetensors --text "This is my own voice, trained with OwnVoice."
 ```
 
-Only a data-loading problem (no usable clips) or a caught PEFT-injection failure exits non-zero. Every successful run writes `adapter.safetensors` and `metadata.json` (training config, the similarity score, a timestamp) to the output directory: two files you keep, with no server round-trip needed to use them again.
+Only a data-loading problem (no usable clips) or a caught PEFT-injection failure exits non-zero. A finished run always writes `adapter.safetensors` and `metadata.json` (training config, similarity score, a timestamp) to the output directory: two files you keep, with no server round-trip needed to use them again.
 
 ### 3. `ownvoice infer`
 
@@ -102,7 +112,69 @@ $ ownvoice check --json
 
 ![Terminal recording of running `ownvoice check --json` for structured, agent-parseable output, then `ownvoice train --help` to show the real training flags and their defaults.](https://raw.githubusercontent.com/RudrenduPaul/ownvoice/main/docs/usage.gif)
 
-## How it works
+## CLI Reference
+
+Reference below is taken directly from each subcommand's real `--help` output (`ownvoice-cli` 0.1.2 on PyPI).
+
+### Global
+
+```
+ownvoice [OPTIONS] COMMAND [ARGS]...
+```
+
+| Flag | Description |
+|---|---|
+| `--version` | Print the OwnVoice version and exit. |
+| `--help` | Show the help message and exit. |
+
+### `ownvoice check`
+
+Free, CPU-only compatibility check: load pocket-tts and dry-run the LoRA injection. No GPU and no training required.
+
+| Flag | Description |
+|---|---|
+| `--json` | Print machine-readable JSON instead of human-readable text. |
+| `--help` | Show the help message and exit. |
+
+### `ownvoice train`
+
+Train a LoRA voice adapter from a directory of `.wav` voice clips. Only `--voice-clips` is required.
+
+| Flag | Type | Default | Description |
+|---|---|---|---|
+| `--voice-clips` | directory, required | – | Directory of `.wav` voice-clip recordings to train from. |
+| `--out` | path | `ownvoice-adapter` | Directory to write `adapter.safetensors` + `metadata.json` to. |
+| `--epochs` | int, `>=1` | `10` | Number of training epochs. |
+| `--lora-rank` | int, `>=1` | `8` | LoRA rank. |
+| `--lora-alpha` | int, `>=1` | `16` | LoRA alpha. |
+| `--lora-dropout` | float, `0.0`–`1.0` | `0.05` | LoRA dropout. |
+| `--learning-rate` | float | `0.0001` | Optimizer learning rate. |
+| `--eval-text` | string | `"This is my own voice, trained with OwnVoice."` | Sentence synthesized after training to score against the reference voice. |
+| `--json` | flag | off | Print machine-readable JSON instead of human-readable text. |
+| `--help` | flag | – | Show the help message and exit. |
+
+### `ownvoice infer`
+
+Generate speech in the trained voice from a saved adapter, and save it to a `.wav` file.
+
+| Flag | Type | Default | Description |
+|---|---|---|---|
+| `--adapter` | path, required | – | Path to a trained `adapter.safetensors` file. |
+| `--text` | string, required | – | Text to synthesize in the trained voice. |
+| `--out` | path | `ownvoice-output.wav` | Output `.wav` file path. |
+| `--reference-audio` | path | recorded reference | Override the reference clip OwnVoice recorded in `metadata.json` at train time. |
+| `--json` | flag | off | Print machine-readable JSON instead of human-readable text. |
+| `--help` | flag | – | Show the help message and exit. |
+
+## Features
+
+- **A free compatibility check before you spend anything on a GPU.** `ownvoice check` loads pocket-tts and dry-runs PEFT's LoRA injection against its real `flow_lm` module tree, CPU only, no training. On failure it prints the actual module tree instead of a stack trace, so a real blocker is reportable instead of silent.
+- **An objective usable/not-usable signal, not a guess.** Every training run resamples the generated test utterance to 16kHz mono and scores it against your reference clips with [Resemblyzer](https://github.com/resemble-ai/Resemblyzer) cosine similarity. `0.75` or higher is labeled `USABLE ADAPTER`; anything lower is `BELOW THRESHOLD`, a labeled outcome and not a crash, exit code `0` either way.
+- **Structured output on every subcommand.** `check`, `train`, and `infer` all accept `--json`, returning one machine-parseable object instead of colored terminal text: confirmed directly, `ownvoice check --json` returns `{"success": true, "message": "...", "module_tree": null}`.
+- **Two files you keep, no server round-trip.** A finished training run writes `adapter.safetensors` (the trained weights, a few megabytes at the default `--lora-rank 8`) and `metadata.json` (the full training config, similarity score, per-epoch loss, and a timestamp) to disk. Load them back any time later with `ownvoice infer`, no network call required.
+- **One base model, on purpose.** OwnVoice wraps pocket-tts only. There is no abstraction layer for a second base model, matching the codebase's own single-target-by-design architecture note: the LoRA injection path (`target_modules="all-linear"` against pocket-tts's real `flow_lm` layers) stays exact instead of generic.
+
+## How It Works
 
 ```
 voice clips (wav)
@@ -123,15 +195,11 @@ voice clips (wav)
   CLI report (>= 0.75 = usable adapter, below triggers a labeled next-step message)
 ```
 
-`ownvoice/data.py` loads and validates the voice-clip directory. `ownvoice/train.py` loads pocket-tts's frozen base model, injects a LoRA adapter into its `flow_lm` transformer with PEFT (`target_modules="all-linear"`), runs the training loop, and saves the adapter plus a manifest. `ownvoice/infer.py` loads a saved adapter back onto the base model and generates speech. `ownvoice/score.py` resamples audio to 16kHz mono with `torchaudio.transforms.Resample` and scores speaker similarity with [Resemblyzer](https://github.com/resemble-ai/Resemblyzer).
+`ownvoice/data.py` loads and validates the voice-clip directory. `ownvoice/train.py` loads pocket-tts's frozen base model, injects a LoRA adapter into its `flow_lm` transformer with PEFT (`target_modules="all-linear"`), runs the training loop, and saves the adapter plus a manifest. `ownvoice/infer.py` loads a saved adapter back onto the base model and generates speech. `ownvoice/score.py` resamples audio to 16kHz mono with `torchaudio.transforms.Resample` and scores speaker similarity with Resemblyzer.
 
 OwnVoice is intentionally single-model: it wraps pocket-tts only, with no abstraction layer for a second base model, since none is in scope.
 
-## Consent and misuse
-
-This tool clones a voice from audio you have the right to use. Do not clone someone else's voice, or a public figure's voice, without their explicit consent. OwnVoice ships no bulk-generation or auto-scaling feature in this version, keeping the blast radius of any single misuse case small.
-
-## Setup-time benchmark vs comparable tools
+## Setup-Time Benchmark vs Comparable Tools
 
 | Tool | Time to first working setup | Notable design choice | Source |
 |---|---|---|---|
@@ -142,9 +210,25 @@ This tool clones a voice from audio you have the right to use. Do not clone some
 
 OwnVoice's own training run is real GPU time, honestly labeled and not hidden behind a fake progress bar, the same category norm Unsloth uses. What OwnVoice compresses to under two minutes is everything *before* that: confirming your environment actually works.
 
-## Implementation status
+## Why OwnVoice Exists
 
-This is a young v0.1. `ownvoice check`, the CLI argument parsing, voice-clip validation, the similarity scoring math, and the adapter/manifest save and load path are implemented and covered by the test suite (`pytest`). LoRA injection was verified structurally against pocket-tts's real source and then confirmed for real: `ownvoice check` was run against pocket-tts's actual downloaded weights, on CPU, and PEFT's `target_modules="all-linear"` injection genuinely succeeded. The full training and generation path has since been verified end to end for real too: a real 2-epoch LoRA training run against loaded pocket-tts weights produced a finite, non-NaN flow-matching loss, and the resulting adapter produced a real, non-silent generated `.wav` file via `ownvoice infer`. That validation surfaced two real gaps in the naive approach and fixed them: (1) pocket-tts's published, inference-only PyPI package does not actually expose a way to compute the training loss through `FlowLMModel.forward()` despite its own docstring claiming otherwise, so OwnVoice computes the flow-matching loss directly from `flow_lm`'s real submodules instead; (2) swapping `base_model.flow_lm` to the PEFT-wrapped model before calling `generate_audio()` breaks pocket-tts's internal KV-cache state lookup -- no swap is needed at all, since PEFT's LoRA injection already mutates `base_model.flow_lm` in place. One real, external limitation to know about: the publicly downloadable pocket-tts weights (`kyutai/pocket-tts-without-voice-cloning`) refuse a raw reference-clip path/URL outright; OwnVoice works around this by pre-loading and resampling the clip itself, but voice-cloning fidelity from that checkpoint is a known limitation of the base model, not an OwnVoice bug -- for kyutai's best-quality cloning weights, request gated access at [huggingface.co/kyutai/pocket-tts](https://huggingface.co/kyutai/pocket-tts). Run `ownvoice check` yourself and read the source before trusting any of it further, that is the right amount of skepticism for a v0.1.
+pocket-tts is a genuinely good, MIT-licensed, CPU-capable local text-to-speech model from Kyutai. Its own maintainers have been clear that fine-tuning code isn't coming any time soon: on [issue #30](https://github.com/kyutai-labs/pocket-tts/issues/30), maintainer @vvolhejn wrote "We are not planning to release fine-tuning code for our TTS and STT models in the near future," and 18 people reacted to that thread asking for exactly this. OwnVoice is a small, standalone CLI that fills that specific gap: point it at a handful of your own voice recordings, and it trains a LoRA adapter you keep and run yourself.
+
+It is not a hosted service, it has no billing, and it does not track usage. It is a training script, an inference script, and a scoring script, wired together behind three CLI commands.
+
+## What OwnVoice Is Not
+
+pocket-tts already ships zero-shot voice cloning out of the box: pass a `.wav` file to `--voice` (or call `get_state_for_audio_prompt()` from Python) and it clones that voice with no training step at all. If that is all you need, use pocket-tts directly, it is simpler and faster.
+
+OwnVoice exists for a narrower case: baking a voice permanently into trained weights, so generation no longer depends on distributing or re-processing a reference audio clip at runtime, with (based on the training objective, not yet independently benchmarked at scale) more consistent output across many generations than a single-clip zero-shot embedding tends to produce. That is the specific gap the 18 reactors on issue #30 were describing, and it is the only thing OwnVoice adds on top of what pocket-tts already does well.
+
+## Consent and Misuse
+
+This tool clones a voice from audio you have the right to use. Do not clone someone else's voice, or a public figure's voice, without their explicit consent. OwnVoice ships no bulk-generation or auto-scaling feature in this version, keeping the blast radius of any single misuse case small.
+
+## Implementation Status
+
+This is a young v0.1. `ownvoice check`, the CLI argument parsing, voice-clip validation, the similarity scoring math, and the adapter/manifest save and load path are implemented and covered by the test suite (`pytest`). LoRA injection was verified structurally against pocket-tts's real source and then confirmed for real: `ownvoice check` was run against pocket-tts's actual downloaded weights, on CPU, and PEFT's `target_modules="all-linear"` injection genuinely succeeded. The full training and generation path has since been verified end to end for real too: a real 2-epoch LoRA training run against loaded pocket-tts weights produced a finite, non-NaN flow-matching loss, and the resulting adapter produced a real, non-silent generated `.wav` file via `ownvoice infer`. That validation surfaced two real gaps in the naive approach and fixed them: (1) pocket-tts's published, inference-only PyPI package does not actually expose a way to compute the training loss through `FlowLMModel.forward()` despite its own docstring claiming otherwise, so OwnVoice computes the flow-matching loss directly from `flow_lm`'s real submodules instead; (2) swapping `base_model.flow_lm` to the PEFT-wrapped model before calling `generate_audio()` breaks pocket-tts's internal KV-cache state lookup, no swap is needed at all, since PEFT's LoRA injection already mutates `base_model.flow_lm` in place. One real, external limitation to know about: the publicly downloadable pocket-tts weights (`kyutai/pocket-tts-without-voice-cloning`) refuse a raw reference-clip path/URL outright; OwnVoice works around this by pre-loading and resampling the clip itself, but voice-cloning fidelity from that checkpoint is a known limitation of the base model, not an OwnVoice bug, for kyutai's best-quality cloning weights, request gated access at [huggingface.co/kyutai/pocket-tts](https://huggingface.co/kyutai/pocket-tts). Run `ownvoice check` yourself and read the source before trusting any of it further, that is the right amount of skepticism for a v0.1.
 
 ## FAQ
 
@@ -167,7 +251,7 @@ No. It is a labeled outcome, not a crash, `ownvoice train` exits `0` either way.
 OwnVoice's own code is MIT (see [LICENSE](https://github.com/RudrenduPaul/ownvoice/blob/main/LICENSE)). pocket-tts's code package is MIT too, but the model weights OwnVoice actually downloads and trains against, [`kyutai/pocket-tts-without-voice-cloning`](https://huggingface.co/kyutai/pocket-tts-without-voice-cloning) and the gated [`kyutai/pocket-tts`](https://huggingface.co/kyutai/pocket-tts), are licensed CC-BY-4.0, not MIT. CC-BY-4.0 permits commercial use but requires attribution to Kyutai. Since any adapter you train is derived from those weights, check that attribution requirement before shipping a commercial product built on it.
 
 **Whose voice can I actually clone with this?**
-Only your own, or someone else's with their explicit, checked consent, never a public figure's voice without it. See [Consent and misuse](#consent-and-misuse) above. OwnVoice ships no bulk-generation or auto-scaling feature in this version, which keeps the blast radius of any single misuse case small.
+Only your own, or someone else's with their explicit, checked consent, never a public figure's voice without it. See [Consent and Misuse](#consent-and-misuse) above. OwnVoice ships no bulk-generation or auto-scaling feature in this version, which keeps the blast radius of any single misuse case small.
 
 ## Contributing
 
@@ -176,4 +260,3 @@ Issues and PRs welcome, MIT licensed throughout. If you want to help close the a
 ## License
 
 MIT. See [LICENSE](https://github.com/RudrenduPaul/ownvoice/blob/main/LICENSE).
-
