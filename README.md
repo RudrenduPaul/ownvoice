@@ -4,6 +4,8 @@
 
 Train a LoRA voice adapter for [pocket-tts](https://github.com/kyutai-labs/pocket-tts) and keep the result: a file on your own disk, not an API subscription.
 
+![Terminal recording of installing ownvoice-cli with pip into a fresh virtual environment, then running `ownvoice --version` and `ownvoice --help` to show the real CLI and its three subcommands.](https://raw.githubusercontent.com/RudrenduPaul/ownvoice/main/docs/demo.gif)
+
 ## Why this exists
 
 pocket-tts is a genuinely good, MIT-licensed, CPU-capable local text-to-speech model from Kyutai. Its own maintainers have been clear that fine-tuning code isn't coming any time soon: on [issue #30](https://github.com/kyutai-labs/pocket-tts/issues/30), maintainer @vvolhejn wrote "We are not planning to release fine-tuning code for our TTS and STT models in the near future," and 18 people reacted to that thread asking for exactly this. OwnVoice is a small, standalone CLI that fills that specific gap: point it at a handful of your own voice recordings, and it trains a LoRA adapter you keep and run yourself.
@@ -35,8 +37,6 @@ Both the npm wrapper and the PyPI package (`ownvoice-cli`) are live, so the comm
 **Torch and CUDA:** `ownvoice check` (see below) needs no GPU at all and runs on CPU, matching pocket-tts's own CPU-capable design. Training a real adapter is much faster on an NVIDIA GPU. If you have one, install the CUDA build of PyTorch first by following [pytorch.org/get-started/locally](https://pytorch.org/get-started/locally/), then install OwnVoice on top of it, so `pip` does not silently pull the CPU-only wheel instead. On Apple Silicon or a CPU-only machine, the default `pip install` of torch is fine: `ownvoice check` and `ownvoice infer` will run normally, `ownvoice train` will just take longer per epoch.
 
 ## Quickstart
-
-![Terminal recording of installing ownvoice-cli with pip into a fresh virtual environment, then running `ownvoice --version` and `ownvoice --help` to show the real CLI and its three subcommands.](https://raw.githubusercontent.com/RudrenduPaul/ownvoice/main/docs/demo.gif)
 
 ![Terminal recording of the full ownvoice CLI reference: --help output for check, train, and infer, showing every real flag and its default value.](https://raw.githubusercontent.com/RudrenduPaul/ownvoice/main/docs/cli-reference.gif)
 
