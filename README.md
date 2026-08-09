@@ -6,18 +6,6 @@ Train a LoRA voice adapter for [pocket-tts](https://github.com/kyutai-labs/pocke
 
 ![Terminal recording of installing ownvoice-cli with pip into a fresh virtual environment, then running `ownvoice --version` and `ownvoice --help` to show the real CLI and its three subcommands.](https://raw.githubusercontent.com/RudrenduPaul/ownvoice/main/docs/demo.gif)
 
-## Why this exists
-
-pocket-tts is a genuinely good, MIT-licensed, CPU-capable local text-to-speech model from Kyutai. Its own maintainers have been clear that fine-tuning code isn't coming any time soon: on [issue #30](https://github.com/kyutai-labs/pocket-tts/issues/30), maintainer @vvolhejn wrote "We are not planning to release fine-tuning code for our TTS and STT models in the near future," and 18 people reacted to that thread asking for exactly this. OwnVoice is a small, standalone CLI that fills that specific gap: point it at a handful of your own voice recordings, and it trains a LoRA adapter you keep and run yourself.
-
-It is not a hosted service, it has no billing, and it does not track usage. It is a training script, an inference script, and a scoring script, wired together behind three CLI commands.
-
-## What OwnVoice is not
-
-pocket-tts already ships zero-shot voice cloning out of the box: pass a `.wav` file to `--voice` (or call `get_state_for_audio_prompt()` from Python) and it clones that voice with no training step at all. If that is all you need, use pocket-tts directly, it is simpler and faster.
-
-OwnVoice exists for a narrower case: baking a voice permanently into trained weights, so generation no longer depends on distributing or re-processing a reference audio clip at runtime, with (based on the training objective, not yet independently benchmarked at scale) more consistent output across many generations than a single-clip zero-shot embedding tends to produce. That is the specific gap the 18 reactors on issue #30 were describing, and it is the only thing OwnVoice adds on top of what pocket-tts already does well.
-
 ## Install
 
 Requires Python 3.11 or newer.
@@ -26,7 +14,7 @@ Requires Python 3.11 or newer.
 pip install ownvoice-cli
 ```
 
-**npx / agent-native environments:** OwnVoice is a Python/PyTorch CLI, so the [npm package](https://www.npmjs.com/package/ownvoice-cli) is a thin wrapper, not a Node reimplementation. It bootstraps into the real CLI via [`uv`](https://docs.astral.sh/uv/) or `pipx`, whichever is already on `PATH` -- useful for coding-agent sandboxes and CI runners that default to a Node toolchain. The npm package was renamed to `ownvoice-cli` (from the old plain `ownvoice`, now deprecated) to match its PyPI counterpart.
+**npx / agent-native environments:** OwnVoice is a Python/PyTorch CLI, so the [npm package](https://www.npmjs.com/package/ownvoice-cli) is a thin wrapper, not a Node reimplementation. It bootstraps into the real CLI via [`uv`](https://docs.astral.sh/uv/) or `pipx`, whichever is already on `PATH` -- useful for coding-agent sandboxes and CI runners that default to a Node toolchain.
 
 ```bash
 npx ownvoice-cli check
@@ -34,7 +22,11 @@ npx ownvoice-cli check
 
 Both the npm wrapper and the PyPI package (`ownvoice-cli`) are live, so the command above works today.
 
-**Torch and CUDA:** `ownvoice check` (see below) needs no GPU at all and runs on CPU, matching pocket-tts's own CPU-capable design. Training a real adapter is much faster on an NVIDIA GPU. If you have one, install the CUDA build of PyTorch first by following [pytorch.org/get-started/locally](https://pytorch.org/get-started/locally/), then install OwnVoice on top of it, so `pip` does not silently pull the CPU-only wheel instead. On Apple Silicon or a CPU-only machine, the default `pip install` of torch is fine: `ownvoice check` and `ownvoice infer` will run normally, `ownvoice train` will just take longer per epoch.
+> [!NOTE]
+> The npm package was renamed to `ownvoice-cli` (from the old plain `ownvoice`, now deprecated) to match its PyPI counterpart. Scripts or agents still pinned to the old name should switch to `ownvoice-cli`.
+
+> [!TIP]
+> `ownvoice check` (see below) needs no GPU at all and runs on CPU, matching pocket-tts's own CPU-capable design. Training a real adapter is much faster on an NVIDIA GPU: if you have one, install the CUDA build of PyTorch first by following [pytorch.org/get-started/locally](https://pytorch.org/get-started/locally/), then install OwnVoice on top of it, so `pip` does not silently pull the CPU-only wheel instead. On Apple Silicon or a CPU-only machine, the default `pip install` of torch is fine: `ownvoice check` and `ownvoice infer` will run normally, `ownvoice train` will just take longer per epoch.
 
 ## Quickstart
 
@@ -103,6 +95,18 @@ $ ownvoice check --json
 ```
 
 ![Terminal recording of running `ownvoice check --json` for structured, agent-parseable output, then `ownvoice train --help` to show the real training flags and their defaults.](https://raw.githubusercontent.com/RudrenduPaul/ownvoice/main/docs/usage.gif)
+
+## Why this exists
+
+pocket-tts is a genuinely good, MIT-licensed, CPU-capable local text-to-speech model from Kyutai. Its own maintainers have been clear that fine-tuning code isn't coming any time soon: on [issue #30](https://github.com/kyutai-labs/pocket-tts/issues/30), maintainer @vvolhejn wrote "We are not planning to release fine-tuning code for our TTS and STT models in the near future," and 18 people reacted to that thread asking for exactly this. OwnVoice is a small, standalone CLI that fills that specific gap: point it at a handful of your own voice recordings, and it trains a LoRA adapter you keep and run yourself.
+
+It is not a hosted service, it has no billing, and it does not track usage. It is a training script, an inference script, and a scoring script, wired together behind three CLI commands.
+
+## What OwnVoice is not
+
+pocket-tts already ships zero-shot voice cloning out of the box: pass a `.wav` file to `--voice` (or call `get_state_for_audio_prompt()` from Python) and it clones that voice with no training step at all. If that is all you need, use pocket-tts directly, it is simpler and faster.
+
+OwnVoice exists for a narrower case: baking a voice permanently into trained weights, so generation no longer depends on distributing or re-processing a reference audio clip at runtime, with (based on the training objective, not yet independently benchmarked at scale) more consistent output across many generations than a single-clip zero-shot embedding tends to produce. That is the specific gap the 18 reactors on issue #30 were describing, and it is the only thing OwnVoice adds on top of what pocket-tts already does well.
 
 ## How it works
 
