@@ -38,6 +38,8 @@ Both the npm wrapper and the PyPI package (`ownvoice-cli`) are live, so the comm
 
 ![Terminal recording of installing ownvoice-cli with pip into a fresh virtual environment, then running `ownvoice --version` and `ownvoice --help` to show the real CLI and its three subcommands.](https://raw.githubusercontent.com/RudrenduPaul/ownvoice/main/docs/demo.gif)
 
+![Terminal recording of the full ownvoice CLI reference: --help output for check, train, and infer, showing every real flag and its default value.](https://raw.githubusercontent.com/RudrenduPaul/ownvoice/main/docs/cli-reference.gif)
+
 ### 1. `ownvoice check`, the free Day-0 validation
 
 Before recording anything or renting a GPU, confirm that PEFT's LoRA injection actually works against pocket-tts's real model structure. This is entirely free: CPU only, no training, no GPU.
