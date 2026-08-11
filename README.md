@@ -1,3 +1,5 @@
+<!-- mcp-name: io.github.RudrenduPaul/ownvoice -->
+
 # OwnVoice
 
 [![PyPI](https://img.shields.io/pypi/v/ownvoice-cli)](https://pypi.org/project/ownvoice-cli/) [![npm](https://img.shields.io/npm/v/ownvoice-cli)](https://www.npmjs.com/package/ownvoice-cli)
@@ -174,6 +176,28 @@ OwnVoice's own code is MIT (see [LICENSE](https://github.com/RudrenduPaul/ownvoi
 
 **Whose voice can I actually clone with this?**
 Only your own, or someone else's with their explicit, checked consent, never a public figure's voice without it. See [Consent and misuse](#consent-and-misuse) above. OwnVoice ships no bulk-generation or auto-scaling feature in this version, which keeps the blast radius of any single misuse case small.
+
+## MCP Server
+
+OwnVoice ships a [Model Context Protocol](https://modelcontextprotocol.io) server, so an MCP-compatible agent can drive `ownvoice check` / `train` / `infer` directly over stdio instead of shelling out and parsing text itself.
+
+```bash
+pip install "ownvoice-cli[mcp]"
+```
+
+Add it to an MCP client's config (for example, Claude Desktop's `claude_desktop_config.json`):
+
+```json
+{
+  "mcpServers": {
+    "ownvoice": {
+      "command": "ownvoice-mcp"
+    }
+  }
+}
+```
+
+The server exposes a single tool, `run(args: list[str]) -> dict`, that shells out to the real `ownvoice` CLI with the given argv and returns its result as structured JSON, so a caller gets the exact same behavior the human-facing CLI has, including `--json` mode. Example call: `run(args=["check", "--json"])` returns `{"result": {"success": true, "message": "...", "module_tree": null}}`. A non-zero exit, a launch failure, or a subprocess timeout is always returned as `{"error": "..."}` rather than raised.
 
 ## Contributing
 
