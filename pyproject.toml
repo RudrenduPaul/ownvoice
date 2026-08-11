@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "ownvoice-cli"
-version = "0.1.5"
+version = "0.1.6"
 description = "Train a LoRA voice adapter for pocket-tts and keep the result on your own disk, not an API subscription."
 readme = "README.md"
 license = { text = "MIT" }
