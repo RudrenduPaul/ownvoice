@@ -1,3 +1,5 @@
+<!-- mcp-name: io.github.RudrenduPaul/ownvoice -->
+
 # OwnVoice
 
 Train a LoRA voice adapter for [pocket-tts](https://github.com/kyutai-labs/pocket-tts) and keep the result: a file on your own disk, not an API subscription.
@@ -228,7 +230,7 @@ This tool clones a voice from audio you have the right to use. Do not clone some
 
 ## Implementation Status
 
-This is a young v0.1. `ownvoice check`, the CLI argument parsing, voice-clip validation, the similarity scoring math, and the adapter/manifest save and load path are implemented and covered by the test suite (`pytest`). LoRA injection was verified structurally against pocket-tts's real source and then confirmed for real: `ownvoice check` was run against pocket-tts's actual downloaded weights, on CPU, and PEFT's `target_modules="all-linear"` injection genuinely succeeded. The full training and generation path has since been verified end to end for real too: a real 2-epoch LoRA training run against loaded pocket-tts weights produced a finite, non-NaN flow-matching loss, and the resulting adapter produced a real, non-silent generated `.wav` file via `ownvoice infer`. That validation surfaced two real gaps in the naive approach and fixed them: (1) pocket-tts's published, inference-only PyPI package does not actually expose a way to compute the training loss through `FlowLMModel.forward()` despite its own docstring claiming otherwise, so OwnVoice computes the flow-matching loss directly from `flow_lm`'s real submodules instead; (2) swapping `base_model.flow_lm` to the PEFT-wrapped model before calling `generate_audio()` breaks pocket-tts's internal KV-cache state lookup, no swap is needed at all, since PEFT's LoRA injection already mutates `base_model.flow_lm` in place. One real, external limitation to know about: the publicly downloadable pocket-tts weights (`kyutai/pocket-tts-without-voice-cloning`) refuse a raw reference-clip path/URL outright; OwnVoice works around this by pre-loading and resampling the clip itself, but voice-cloning fidelity from that checkpoint is a known limitation of the base model, not an OwnVoice bug, for kyutai's best-quality cloning weights, request gated access at [huggingface.co/kyutai/pocket-tts](https://huggingface.co/kyutai/pocket-tts). Run `ownvoice check` yourself and read the source before trusting any of it further, that is the right amount of skepticism for a v0.1.
+This is a young, early-stage release. `ownvoice check`, the CLI argument parsing, voice-clip validation, the similarity scoring math, and the adapter/manifest save and load path are implemented and covered by the test suite (`pytest`). LoRA injection was verified structurally against pocket-tts's real source and then confirmed for real: `ownvoice check` was run against pocket-tts's actual downloaded weights, on CPU, and PEFT's `target_modules="all-linear"` injection genuinely succeeded. The full training and generation path has since been verified end to end for real too: a real 2-epoch LoRA training run against loaded pocket-tts weights produced a finite, non-NaN flow-matching loss, and the resulting adapter produced a real, non-silent generated `.wav` file via `ownvoice infer`. That validation surfaced two real gaps in the naive approach and fixed them: (1) pocket-tts's published, inference-only PyPI package does not actually expose a way to compute the training loss through `FlowLMModel.forward()` despite its own docstring claiming otherwise, so OwnVoice computes the flow-matching loss directly from `flow_lm`'s real submodules instead; (2) swapping `base_model.flow_lm` to the PEFT-wrapped model before calling `generate_audio()` breaks pocket-tts's internal KV-cache state lookup -- no swap is needed at all, since PEFT's LoRA injection already mutates `base_model.flow_lm` in place. One real, external limitation to know about: the publicly downloadable pocket-tts weights (`kyutai/pocket-tts-without-voice-cloning`) refuse a raw reference-clip path/URL outright; OwnVoice works around this by pre-loading and resampling the clip itself, but voice-cloning fidelity from that checkpoint is a known limitation of the base model, not an OwnVoice bug -- for kyutai's best-quality cloning weights, request gated access at [huggingface.co/kyutai/pocket-tts](https://huggingface.co/kyutai/pocket-tts). Run `ownvoice check` yourself and read the source before trusting any of it further, that is the right amount of skepticism for a project this early.
 
 ## FAQ
 
@@ -252,6 +254,28 @@ OwnVoice's own code is MIT (see [LICENSE](https://github.com/RudrenduPaul/ownvoi
 
 **Whose voice can I actually clone with this?**
 Only your own, or someone else's with their explicit, checked consent, never a public figure's voice without it. See [Consent and Misuse](#consent-and-misuse) above. OwnVoice ships no bulk-generation or auto-scaling feature in this version, which keeps the blast radius of any single misuse case small.
+
+## MCP Server
+
+OwnVoice ships a [Model Context Protocol](https://modelcontextprotocol.io) server, so an MCP-compatible agent can drive `ownvoice check` / `train` / `infer` directly over stdio instead of shelling out and parsing text itself.
+
+```bash
+pip install "ownvoice-cli[mcp]"
+```
+
+Add it to an MCP client's config (for example, Claude Desktop's `claude_desktop_config.json`):
+
+```json
+{
+  "mcpServers": {
+    "ownvoice": {
+      "command": "ownvoice-mcp"
+    }
+  }
+}
+```
+
+The server exposes a single tool, `run(args: list[str]) -> dict`, that shells out to the real `ownvoice` CLI with the given argv and returns its result as structured JSON, so a caller gets the exact same behavior the human-facing CLI has, including `--json` mode. Example call: `run(args=["check", "--json"])` returns `{"result": {"success": true, "message": "...", "module_tree": null}}`. A non-zero exit, a launch failure, or a subprocess timeout is always returned as `{"error": "..."}` rather than raised.
 
 ## Contributing
 

@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "ownvoice-cli"
-version = "0.1.4"
+version = "0.1.6"
 description = "Train a LoRA voice adapter for pocket-tts and keep the result on your own disk, not an API subscription."
 readme = "README.md"
 license = { text = "MIT" }
@@ -13,7 +13,7 @@ authors = [
     { name = "Sourav Nandy" },
 ]
 requires-python = ">=3.11"
-keywords = ["tts", "text-to-speech", "voice-cloning", "lora", "peft", "pocket-tts", "fine-tuning", "local-first", "pytorch"]
+keywords = ["tts", "text-to-speech", "voice-cloning", "lora", "peft", "pocket-tts", "fine-tuning", "local-first", "pytorch", "mcp", "model-context-protocol", "agent-tools"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Environment :: Console",
@@ -44,6 +44,11 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# The mcp package requires Python >=3.10, below this project's own >=3.11
+# floor, so it never conflicts here. Pinned to >=2.0.0: mcp_server.py uses
+# `mcp.server.MCPServer`, which replaced `mcp.server.fastmcp.FastMCP` in
+# the 2.0.0 release -- verified directly against the installed package.
+mcp = ["mcp[cli]>=2.0.0"]
 dev = [
     "pytest>=8.0.0",
     "pytest-mock>=3.14.0",
@@ -58,6 +63,10 @@ Issues = "https://github.com/RudrenduPaul/ownvoice/issues"
 
 [project.scripts]
 ownvoice = "ownvoice.cli:app"
+ownvoice-mcp = "ownvoice.mcp_server:main"
+
+[tool.hatch.build]
+exclude = [".venv*/"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["ownvoice"]
