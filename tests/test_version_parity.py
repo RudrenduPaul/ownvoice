@@ -35,7 +35,9 @@ def _pyproject_version() -> str:
 
 def _npm_package_version() -> str:
     package_json = REPO_ROOT / "npm" / "package.json"
-    data = json.loads(package_json.read_text(encoding="utf-8"))
+    # utf-8-sig tolerates a leading BOM (e.g. from a Windows editor save)
+    # without failing json.loads on it.
+    data = json.loads(package_json.read_text(encoding="utf-8-sig"))
     return data["version"]
 
 
